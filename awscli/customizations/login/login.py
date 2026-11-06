@@ -81,6 +81,10 @@ class LoginCommand(BasicCommand):
         # which we'll save to the profile when we do
         self._prompted_for_region = False
 
+        # Records if the region came from --region, which we'll save to
+        # the profile when the profile doesn't have a region of its own
+        self._region_from_args = False
+
         if token_loader is None:
             token_cache = JSONFileCache(get_login_token_cache_directory())
             token_loader = LoginCredentialsLoader(token_cache)
@@ -254,6 +258,7 @@ class LoginCommand(BasicCommand):
 
     def _resolve_region(self, parsed_globals):
         if parsed_globals.region:
+            self._region_from_args = True
             return parsed_globals.region
         try:
             if self._session.get_config_variable('region'):
@@ -309,7 +314,12 @@ class LoginCommand(BasicCommand):
             'login_session': session_id,
         }
 
-        if self._prompted_for_region:
+        profile_config = self._session.full_config['profiles'].get(
+            profile_name, {}
+        )
+        if self._prompted_for_region or (
+            self._region_from_args and 'region' not in profile_config
+        ):
             new_values['region'] = region
 
         self._config_file_writer.update_config(new_values, config_filename)

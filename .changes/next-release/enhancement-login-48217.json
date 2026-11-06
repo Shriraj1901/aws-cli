@@ -1,0 +1,5 @@
+{
+  "type": "enhancement",
+  "category": "login",
+  "description": "Save the region passed with ``--region`` to the profile in ``aws login`` when the profile does not have a region configured."
+}

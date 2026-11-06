@@ -115,6 +115,7 @@ def test_run_main_same_device_flow(
         {
             '__section__': "profile profile-name",
             'login_session': 'arn:aws:iam::0123456789012:user/Admin',
+            'region': 'us-east-1',
         },
         'configfile',
     )
@@ -179,6 +180,7 @@ def test_run_main_cross_device_flow(
         {
             '__section__': "profile profile-name",
             'login_session': 'arn:aws:iam::0123456789012:user/Admin',
+            'region': 'us-east-1',
         },
         'configfile',
     )
@@ -266,6 +268,106 @@ def test_new_profile_without_region(
             '__section__': "profile new-profile",
             'login_session': 'arn:aws:iam::0123456789012:user/Admin',
             'region': 'us-west-2',
+        },
+        'configfile',
+    )
+
+
+@pytest.mark.parametrize(
+    'profile_config,configured_region,expected_config',
+    [
+        pytest.param(
+            {},
+            None,
+            {'region': 'eu-west-1'},
+            id="--region is saved to a profile without a region",
+        ),
+        pytest.param(
+            {'region': 'us-west-2'},
+            'us-west-2',
+            {},
+            id="--region does not replace the region of the profile",
+        ),
+    ],
+)
+@mock.patch('awscli.customizations.login.utils.get_base_sign_in_uri')
+@mock.patch(
+    'awscli.customizations.login.utils.SameDeviceLoginTokenFetcher.fetch_token'
+)
+def test_region_argument_saved_only_if_profile_has_no_region(
+    mock_token_fetcher,
+    mock_base_sign_in_uri,
+    profile_config,
+    configured_region,
+    expected_config,
+    mock_login_command,
+    mock_config_file_writer,
+    mock_session,
+):
+    mock_session.full_config = {'profiles': {'profile-name': profile_config}}
+    mock_session.get_config_variable.side_effect = lambda key: {
+        'config_file': 'configfile',
+        'region': configured_region,
+    }.get(key)
+    mock_base_sign_in_uri.return_value = 'https://foo'
+    mock_token_fetcher.return_value = (
+        {
+            'accessToken': 'access_token',
+            'idToken': SAMPLE_ID_TOKEN,
+            'expiresIn': 3600,
+        },
+        'arn:aws:iam::0123456789012:user/Admin',
+    )
+    global_args = Namespace(
+        region='eu-west-1', endpoint_url=None, verify_ssl=None
+    )
+
+    mock_login_command._run_main(DEFAULT_ARGS, global_args)
+
+    mock_config_file_writer.update_config.assert_called_once_with(
+        {
+            '__section__': "profile profile-name",
+            'login_session': 'arn:aws:iam::0123456789012:user/Admin',
+            **expected_config,
+        },
+        'configfile',
+    )
+
+
+@mock.patch('awscli.customizations.login.utils.get_base_sign_in_uri')
+@mock.patch(
+    'awscli.customizations.login.utils.SameDeviceLoginTokenFetcher.fetch_token'
+)
+def test_configured_region_is_not_written_to_profile(
+    mock_token_fetcher,
+    mock_base_sign_in_uri,
+    mock_login_command,
+    mock_config_file_writer,
+    mock_session,
+):
+    # The region comes from the environment rather than --region,
+    # so there's nothing to save to the profile.
+    mock_session.get_config_variable.side_effect = lambda key: {
+        'config_file': 'configfile',
+        'region': 'ap-south-1',
+    }.get(key)
+    mock_base_sign_in_uri.return_value = 'https://foo'
+    mock_token_fetcher.return_value = (
+        {
+            'accessToken': 'access_token',
+            'idToken': SAMPLE_ID_TOKEN,
+            'expiresIn': 3600,
+        },
+        'arn:aws:iam::0123456789012:user/Admin',
+    )
+    global_args = Namespace(region=None, endpoint_url=None, verify_ssl=None)
+
+    mock_login_command._run_main(DEFAULT_ARGS, global_args)
+
+    mock_config_file_writer.update_config.assert_called_once_with(
+        {
+            '__section__': "profile profile-name",
+            'login_session': 'arn:aws:iam::0123456789012:user/Admin',
         },
         'configfile',
     )
